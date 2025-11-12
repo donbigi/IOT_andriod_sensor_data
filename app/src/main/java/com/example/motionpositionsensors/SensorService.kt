@@ -16,7 +16,6 @@ import android.os.Environment
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
@@ -42,6 +41,18 @@ class SensorService : Service(), SensorEventListener {
     private var csvFile: File? = null
     private var currentZoneName: String? = null
 
+    // --- Pre-record buffer: keep recent sensor snapshots for pre-click context ---
+    private data class Sample(
+        val ts: Long,
+        val acc: FloatArray,
+        val gyro: FloatArray,
+        val rotv: FloatArray,
+        val mag: FloatArray
+    )
+
+    // buffer (deque) storing Sample in chronological order (oldest -> newest)
+    private val preBuffer: ArrayDeque<Sample> = ArrayDeque()
+
     companion object {
         const val CHANNEL_ID = "sensor_channel"
         const val NOTIF_ID = 1
@@ -52,6 +63,10 @@ class SensorService : Service(), SensorEventListener {
 
         // How often to refresh notification (ms)
         const val NOTIF_UPDATE_INTERVAL_MS = 1000L
+
+        // PRE-RECORD WINDOW: how many milliseconds of data to keep before a click
+        // Keep at 1000 ms (1 second). Change this if you want shorter/longer.
+        const val PRE_RECORD_MS = 1000L
     }
 
     private var lastNotifUpdateMs = 0L
@@ -59,7 +74,6 @@ class SensorService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
-
         try {
             sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         } catch (t: Throwable) {
@@ -81,14 +95,21 @@ class SensorService : Service(), SensorEventListener {
 
         createNotificationChannel()
 
-        // Start initial foreground notification
+        // Start initial foreground notification (keeps behavior identical to last working version)
         val initial = "Sensors active — waiting for data"
-        startForeground(
-            NOTIF_ID,
-            buildNotification("Motion Sensors Active", initial, initial)
-        )
-
-        Log.d(TAG, "Foreground service started with initial notification")
+        try {
+            startForeground(
+                NOTIF_ID,
+                buildNotification("Motion Sensors Active", initial, initial)
+            )
+            Log.d(TAG, "Foreground service started with initial notification")
+        } catch (sec: SecurityException) {
+            Log.e(TAG, "startForeground SecurityException", sec)
+            stopSelf()
+            return
+        } catch (t: Throwable) {
+            Log.e(TAG, "startForeground unexpected", t)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -96,9 +117,11 @@ class SensorService : Service(), SensorEventListener {
             when (intent?.action) {
                 ACTION_START_RECORDING -> {
                     val zoneName = intent.getStringExtra("zoneName") ?: "ZONE"
+                    Log.d(TAG, "onStartCommand: START_RECORDING -> $zoneName")
                     startRecording(zoneName)
                 }
                 ACTION_STOP_RECORDING -> {
+                    Log.d(TAG, "onStartCommand: STOP_RECORDING")
                     stopRecording()
                 }
                 else -> Log.d(TAG, "onStartCommand: action=${intent?.action}")
@@ -113,6 +136,7 @@ class SensorService : Service(), SensorEventListener {
         try {
             val ts = System.currentTimeMillis()
 
+            // update snapshot for the sensor that fired
             when (event.sensor.type) {
                 Sensor.TYPE_ACCELEROMETER -> acc = event.values.clone()
                 Sensor.TYPE_GYROSCOPE -> gyro = event.values.clone()
@@ -120,54 +144,66 @@ class SensorService : Service(), SensorEventListener {
                 Sensor.TYPE_MAGNETIC_FIELD -> mag = event.values.clone()
             }
 
-            // Send broadcast so MainActivity can update its dialog
-            val broadcast = Intent(ACTION_SENSOR_UPDATE).apply {
+            // Take a snapshot of all sensors now
+            val snapAcc = acc.clone()
+            val snapGyro = gyro.clone()
+            val snapRotv = rotv.clone()
+            val snapMag = mag.clone()
+            val sample = Sample(ts, snapAcc, snapGyro, snapRotv, snapMag)
+
+            // broadcast updated arrays (scoped to our app)
+            val b = Intent(ACTION_SENSOR_UPDATE).apply {
                 putExtra("timestamp", ts)
-                putExtra("acc", acc)
-                putExtra("gyro", gyro)
-                putExtra("rotv", rotv)
-                putExtra("mag", mag)
+                putExtra("acc", snapAcc)
+                putExtra("gyro", snapGyro)
+                putExtra("rotv", snapRotv)
+                putExtra("mag", snapMag)
                 setPackage(packageName)
             }
-            sendBroadcast(broadcast)
+            sendBroadcast(b)
 
-            // Write to CSV if recording
+            // If currently recording -> append immediately to CSV
             if (isRecording) {
-                csvWriter?.append(
-                    "$ts," +
-                            "${safe(acc, 0)},${safe(acc, 1)},${safe(acc, 2)}," +
-                            "${safe(gyro, 0)},${safe(gyro, 1)},${safe(gyro, 2)}," +
-                            "${safe(rotv, 0)},${safe(rotv, 1)},${safe(rotv, 2)}," +
-                            "${safe(mag, 0)},${safe(mag, 1)},${safe(mag, 2)}\n"
-                )
+                writeSampleToCsv(sample)
+            } else {
+                // not recording: add to pre-buffer and prune older samples beyond PRE_RECORD_MS
+                synchronized(preBuffer) {
+                    preBuffer.addLast(sample)
+
+                    while (true) {
+                        val first = preBuffer.firstOrNull() ?: break
+                        if (ts - first.ts > PRE_RECORD_MS) {
+                            preBuffer.removeFirst()
+                        } else {
+                            break
+                        }
+                    }
+                }
             }
 
-            // Update notification every 1s
+            // throttle notification updates (same behavior as last working version)
             val now = System.currentTimeMillis()
             if (now - lastNotifUpdateMs >= NOTIF_UPDATE_INTERVAL_MS) {
                 lastNotifUpdateMs = now
 
                 val shortSummary = String.format(
                     "ACC: %.2f,%.2f,%.2f | GYRO: %.2f,%.2f,%.2f",
-                    safe(acc, 0), safe(acc, 1), safe(acc, 2),
-                    safe(gyro, 0), safe(gyro, 1), safe(gyro, 2)
+                    safe(snapAcc, 0), safe(snapAcc, 1), safe(snapAcc, 2),
+                    safe(snapGyro, 0), safe(snapGyro, 1), safe(snapGyro, 2)
                 )
 
                 val bigText = buildString {
-                    append("ACC: X=${fmt(acc, 0)}, Y=${fmt(acc, 1)}, Z=${fmt(acc, 2)}\n")
-                    append("GYRO: X=${fmt(gyro, 0)}, Y=${fmt(gyro, 1)}, Z=${fmt(gyro, 2)}\n")
-                    append("ROT: X=${fmt(rotv, 0)}, Y=${fmt(rotv, 1)}, Z=${fmt(rotv, 2)}\n")
-                    append("MAG: X=${fmt(mag, 0)}, Y=${fmt(mag, 1)}, Z=${fmt(mag, 2)}")
+                    append("ACC: X=${fmt(snapAcc, 0)}, Y=${fmt(snapAcc, 1)}, Z=${fmt(snapAcc, 2)}\n")
+                    append("GYRO: X=${fmt(snapGyro, 0)}, Y=${fmt(snapGyro, 1)}, Z=${fmt(snapGyro, 2)}\n")
+                    append("ROT: X=${fmt(snapRotv, 0)}, Y=${fmt(snapRotv, 1)}, Z=${fmt(snapRotv, 2)}\n")
+                    append("MAG: X=${fmt(snapMag, 0)}, Y=${fmt(snapMag, 1)}, Z=${fmt(snapMag, 2)}")
                 }
 
-                val title = if (isRecording && currentZoneName != null)
-                    "Recording ${currentZoneName}"
-                else
-                    "Motion Sensors Active"
+                val title = if (isRecording && currentZoneName != null) "Recording $currentZoneName" else "Motion Sensors Active"
 
                 val notif = buildNotification(title, shortSummary, bigText)
 
-                // 👇 This is the key change — ensures Android redraws it
+                // ensure Android redraws the foreground notification (exactly like last working)
                 startForeground(NOTIF_ID, notif)
 
                 Log.v(TAG, "Notification updated: $shortSummary")
@@ -177,7 +213,9 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // no-op
+    }
 
     private fun startRecording(zoneName: String) {
         try {
@@ -190,10 +228,25 @@ class SensorService : Service(), SensorEventListener {
             csvWriter = FileWriter(csvFile!!)
             csvWriter?.append("timestamp,accX,accY,accZ,gyroX,gyroY,gyroZ,rotX,rotY,rotZ,magX,magY,magZ\n")
 
+            // First: write a snapshot of the pre-buffer contents (chronological order)
+            synchronized(preBuffer) {
+                if (preBuffer.isNotEmpty()) {
+                    val toFlush = preBuffer.toList() // snapshot to avoid concurrent modification
+                    Log.i(TAG, "Flushing ${toFlush.size} pre-record samples to CSV for $zoneName")
+                    for (s in toFlush) {
+                        writeSampleToCsv(s)
+                    }
+                    preBuffer.clear()
+                } else {
+                    Log.i(TAG, "No pre-record samples available to flush")
+                }
+            }
+
             isRecording = true
             currentZoneName = zoneName
 
             val notif = buildNotification("Recording $zoneName", "Recording started", buildSmallBigText())
+            // keep notification visible and updated as foreground
             startForeground(NOTIF_ID, notif)
 
             Log.i(TAG, "startRecording -> ${csvFile?.absolutePath}")
@@ -206,8 +259,10 @@ class SensorService : Service(), SensorEventListener {
 
     private fun stopRecording() {
         try {
-            if (!isRecording) return
-
+            if (!isRecording) {
+                Log.w(TAG, "stopRecording called but not recording")
+                return
+            }
             isRecording = false
             csvWriter?.flush()
             csvWriter?.close()
@@ -219,19 +274,30 @@ class SensorService : Service(), SensorEventListener {
                 setPackage(packageName)
             }
             sendBroadcast(saved)
-
-            val notif = buildNotification(
-                "Sensors Active — Not Recording",
-                "Recording saved",
-                buildSmallBigText()
-            )
-            startForeground(NOTIF_ID, notif)
-
             Log.i(TAG, "stopRecording saved=${csvFile?.absolutePath}")
             csvFile = null
             currentZoneName = null
+
+            // notify user
+            val notif = buildNotification("Sensors active — not recording", "Recording saved", buildSmallBigText())
+            startForeground(NOTIF_ID, notif)
         } catch (e: IOException) {
             Log.e(TAG, "stopRecording failed", e)
+        }
+    }
+
+    // helper to write a Sample into the CSV writer (safely)
+    private fun writeSampleToCsv(s: Sample) {
+        try {
+            csvWriter?.append(
+                "${s.ts}," +
+                        "${safe(s.acc, 0)},${safe(s.acc, 1)},${safe(s.acc, 2)}," +
+                        "${safe(s.gyro, 0)},${safe(s.gyro, 1)},${safe(s.gyro, 2)}," +
+                        "${safe(s.rotv, 0)},${safe(s.rotv, 1)},${safe(s.rotv, 2)}," +
+                        "${safe(s.mag, 0)},${safe(s.mag, 1)},${safe(s.mag, 2)}\n"
+            )
+        } catch (e: IOException) {
+            Log.e(TAG, "writeSampleToCsv failed", e)
         }
     }
 
@@ -248,7 +314,7 @@ class SensorService : Service(), SensorEventListener {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Sensor Background",
-                NotificationManager.IMPORTANCE_DEFAULT // was LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Shows live motion sensor data updates"
             }
@@ -256,6 +322,9 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
+    /**
+     * Build a notification. If bigText is provided, use BigTextStyle to show multi-line content.
+     */
     private fun buildNotification(title: String, content: String, bigText: String? = null): Notification {
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -275,13 +344,10 @@ class SensorService : Service(), SensorEventListener {
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(false)
-        // 👇 Removed .setOngoing(true) to allow visible updates
-        //.setOngoing(true)
 
         if (!bigText.isNullOrEmpty()) {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
         }
-
         return builder.build()
     }
 
@@ -297,6 +363,7 @@ class SensorService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    // --- small helpers ----
     private fun safe(arr: FloatArray, idx: Int): Float {
         return if (arr.size > idx && !arr[idx].isNaN()) arr[idx] else 0f
     }
