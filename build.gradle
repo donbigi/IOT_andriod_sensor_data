@@ -1,0 +1,17 @@
+// build.gradle (project)
+buildscript {
+    ext.kotlin_version = "2.2.0" // Kotlin 2.2.0
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlin_version}"
+        // NOTE: keep other classpath (like Hilt) here if you add them
+    }
+}
+
+tasks.register('clean', Delete) {
+    layout.buildDirectory
+}

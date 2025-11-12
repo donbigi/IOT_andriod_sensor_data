@@ -1,0 +1,40 @@
+<resources>
+    <string name="app_name">MotionPositionSensors</string>
+
+    <string name="label_magneticFieldX">X axis: %1$.2f</string>
+    <string name="label_magneticFieldY">Y axis: %1$.2f</string>
+    <string name="label_magneticFieldZ">Z axis: %1$.2f</string>
+
+    <string name="label_accelerometerX">X axis: %1$.2f</string>
+    <string name="label_accelerometerY">Y axis: %1$.2f</string>
+    <string name="label_accelerometerZ">Z axis: %1$.2f</string>
+
+    <string name="label_gyroscopeX">X axis: %1$.2f</string>
+    <string name="label_gyroscopeY">Y axis: %1$.2f</string>
+    <string name="label_gyroscopeZ">Z axis: %1$.2f</string>
+
+    <string name="label_rotvX">X: %1$.2f</string>
+    <string name="label_rotvY">Y: %1$.2f</string>
+    <string name="label_rotvZ">Z: %1$.2f</string>
+    <string name="label_rotvS">Scalar component: %1$.2f</string>
+
+    <string name="label_gravX">X: %1$.2f</string>
+    <string name="label_gravY">Y: %1$.2f</string>
+    <string name="label_gravZ">Z: %1$.2f</string>
+
+    <string name="label_lineX">X: %1$.2f</string>
+    <string name="label_lineY">Y: %1$.2f</string>
+    <string name="label_lineZ">Z: %1$.2f</string>
+
+    <string name="label_grtX">X: %1$.2f</string>
+    <string name="label_grtY">Y: %1$.2f</string>
+    <string name="label_grtZ">Z: %1$.2f</string>
+
+    <string name="label_prox">Proximity: %1$.2f</string>
+
+    <string name="label_azimuth">Azimuth: %1$.2f</string>
+    <string name="label_pitch">Pitch: %1$.2f</string>
+    <string name="label_roll">Roll: %1$.2f</string>
+
+    <string name="error_no_sensor">Sensor not available!</string>
+</resources>

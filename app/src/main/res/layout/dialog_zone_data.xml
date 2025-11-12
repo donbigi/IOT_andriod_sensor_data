@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="300dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/dialog_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Zone Data Info"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <TextView
+        android:id="@+id/text_acc_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ACC: X=—, Y=—, Z=—"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/text_gyro_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="GYRO: X=—, Y=—, Z=—"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/text_rot_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ROT: X=—, Y=—, Z=—"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/text_mag_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="MAG: X=—, Y=—, Z=—"
+        android:textSize="16sp"
+        android:layout_marginBottom="24dp"/>
+
+    <Button
+        android:id="@+id/button_close"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:text="Close"/>
+
+</LinearLayout>
