@@ -94,7 +94,6 @@ class MainActivity : AppCompatActivity() {
         setupZoneClickListeners()
     }
 
-
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
@@ -111,7 +110,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     private fun startSensorServiceSafely() {
         val svc = Intent(this, SensorService::class.java)
         try {
@@ -123,15 +121,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupZoneClickListeners() {
+        // IDs must match your activity_main.xml — zone0 is included last
         val zoneIds = listOf(
             R.id.layout_zone1, R.id.layout_zone2, R.id.layout_zone3,
             R.id.layout_zone4, R.id.layout_zone5, R.id.layout_zone6,
-            R.id.layout_zone7, R.id.layout_zone8, R.id.layout_zone9
+            R.id.layout_zone7, R.id.layout_zone8, R.id.layout_zone9,
+            R.id.layout_zone0
         )
 
-        zoneIds.forEachIndexed { index, id ->
+        // corresponding zone numbers — last entry is 0
+        val zoneNumbers = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)
+
+        zoneIds.zip(zoneNumbers).forEach { (id, zoneNumber) ->
             findViewById<LinearLayout>(id)?.setOnClickListener {
-                showZoneDataDialog(index + 1)
+                showZoneDataDialog(zoneNumber)
             }
         }
     }
@@ -193,7 +196,8 @@ class MainActivity : AppCompatActivity() {
         tvRot?.text = "ROT: X=-, Y=-, Z=-"
         tvMag?.text = "MAG: X=-, Y=-, Z=-"
 
-        val zoneName = "ZONE$zoneNumber"
+        // Use numeric zone names (e.g., "8" or "0")
+        val zoneName = zoneNumber.toString()
 
         val startIntent = Intent(this, SensorService::class.java).apply {
             action = SensorService.ACTION_START_RECORDING
