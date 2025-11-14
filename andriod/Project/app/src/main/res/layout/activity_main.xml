@@ -6,11 +6,53 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <!-- Top empty space: 1/6 of screen -->
+
+    <!-- 🔹 Top empty band -->
     <Space
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="0.4" />
+
+    <!-- Top: Live sensor data (replaces old Space) -->
+    <LinearLayout
+        android:id="@+id/live_panel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0.4"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/live_acc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ACC: X=-, Y=-, Z=-"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/live_gyro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GYRO: X=-, Y=-, Z=-"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/live_rot"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ROT: X=-, Y=-, Z=-"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/live_mag"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MAG: X=-, Y=-, Z=-"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <!-- Keypad: 2/3 of screen -->
     <GridLayout
@@ -276,10 +318,10 @@
 
     </GridLayout>
 
-    <!-- Bottom empty space: 1/6 of screen -->
+    <!-- Bottom empty space -->
     <Space
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="0.5" />
+        android:layout_weight="0.4" />
 
 </LinearLayout>

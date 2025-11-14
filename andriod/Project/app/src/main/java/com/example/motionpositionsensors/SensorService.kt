@@ -53,6 +53,9 @@ class SensorService : Service(), SensorEventListener {
     // buffer (deque) storing Sample in chronological order (oldest -> newest)
     private val preBuffer: ArrayDeque<Sample> = ArrayDeque()
 
+    // 🔥 NEW: auto-stop deadline for post-click recording (wall-clock ms)
+    private var postEndTime: Long = 0L
+
     companion object {
         const val CHANNEL_ID = "sensor_channel"
         const val NOTIF_ID = 1
@@ -165,6 +168,12 @@ class SensorService : Service(), SensorEventListener {
             // If currently recording -> append immediately to CSV
             if (isRecording) {
                 writeSampleToCsv(sample)
+
+                // 🔥 NEW: auto-stop 1.5s after startRecording()
+                if (System.currentTimeMillis() >= postEndTime) {
+                    Log.i(TAG, "Auto-stop reached at postEndTime=$postEndTime")
+                    stopRecording()
+                }
             } else {
                 // not recording: add to pre-buffer and prune older samples beyond PRE_RECORD_MS
                 synchronized(preBuffer) {
@@ -244,6 +253,9 @@ class SensorService : Service(), SensorEventListener {
 
             isRecording = true
             currentZoneName = zoneName
+
+            // 🔥 NEW: set auto-stop deadline: now + 1500 ms (1.5 seconds)
+            postEndTime = System.currentTimeMillis() + 1500L
 
             val notif = buildNotification("Recording $zoneName", "Recording started", buildSmallBigText())
             // keep notification visible and updated as foreground

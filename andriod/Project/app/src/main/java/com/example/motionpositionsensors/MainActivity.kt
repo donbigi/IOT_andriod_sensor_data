@@ -1,7 +1,6 @@
 package com.example.motionpositionsensors
 
 import android.Manifest
-import android.app.Dialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,8 +9,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.view.Window
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -23,15 +20,13 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
     private val REQ_POST_NOTIF = 101
 
-    // zone dialog UI
-    private var zoneDialog: Dialog? = null
-    private var tvAcc: TextView? = null
-    private var tvGyro: TextView? = null
-    private var tvRot: TextView? = null
-    private var tvMag: TextView? = null
-    private var btnClose: Button? = null
-
     private var receiverRegistered = false
+
+    // live sensor panel (top)
+    private lateinit var liveAcc: TextView
+    private lateinit var liveGyro: TextView
+    private lateinit var liveRot: TextView
+    private lateinit var liveMag: TextView
 
     private val sensorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -43,33 +38,32 @@ class MainActivity : AppCompatActivity() {
                     val gyro = intent.getFloatArrayExtra("gyro")
                     val rotv = intent.getFloatArrayExtra("rotv")
                     val mag = intent.getFloatArrayExtra("mag")
-                    Log.v(TAG, "Received sensor update: acc=${acc?.contentToString()}, gyro=${gyro?.contentToString()}")
 
-                    // Update dialog if open — otherwise ignore
-                    if (acc != null && tvAcc != null) {
-                        tvAcc?.text = "ACC: X=${"%.2f".format(acc[0])}, Y=${"%.2f".format(acc[1])}, Z=${"%.2f".format(acc[2])}"
+                    if (acc != null) {
+                        liveAcc.text = "ACC: X=${"%.2f".format(acc[0])}, Y=${"%.2f".format(acc[1])}, Z=${"%.2f".format(acc[2])}"
                     } else {
-                        tvAcc?.text = "ACC: X=-, Y=-, Z=-"
+                        liveAcc.text = "ACC: X=-, Y=-, Z=-"
                     }
 
-                    if (gyro != null && tvGyro != null) {
-                        tvGyro?.text = "GYRO: X=${"%.2f".format(gyro[0])}, Y=${"%.2f".format(gyro[1])}, Z=${"%.2f".format(gyro[2])}"
+                    if (gyro != null) {
+                        liveGyro.text = "GYRO: X=${"%.2f".format(gyro[0])}, Y=${"%.2f".format(gyro[1])}, Z=${"%.2f".format(gyro[2])}"
                     } else {
-                        tvGyro?.text = "GYRO: X=-, Y=-, Z=-"
+                        liveGyro.text = "GYRO: X=-, Y=-, Z=-"
                     }
 
-                    if (rotv != null && tvRot != null) {
-                        tvRot?.text = "ROT: X=${"%.2f".format(rotv[0])}, Y=${"%.2f".format(rotv[1])}, Z=${"%.2f".format(rotv[2])}"
+                    if (rotv != null) {
+                        liveRot.text = "ROT: X=${"%.2f".format(rotv[0])}, Y=${"%.2f".format(rotv[1])}, Z=${"%.2f".format(rotv[2])}"
                     } else {
-                        tvRot?.text = "ROT: X=-, Y=-, Z=-"
+                        liveRot.text = "ROT: X=-, Y=-, Z=-"
                     }
 
-                    if (mag != null && tvMag != null) {
-                        tvMag?.text = "MAG: X=${"%.2f".format(mag[0])}, Y=${"%.2f".format(mag[1])}, Z=${"%.2f".format(mag[2])}"
+                    if (mag != null) {
+                        liveMag.text = "MAG: X=${"%.2f".format(mag[0])}, Y=${"%.2f".format(mag[1])}, Z=${"%.2f".format(mag[2])}"
                     } else {
-                        tvMag?.text = "MAG: X=-, Y=-, Z=-"
+                        liveMag.text = "MAG: X=-, Y=-, Z=-"
                     }
                 }
+
                 SensorService.ACTION_RECORDING_SAVED -> {
                     val fileName = intent.getStringExtra("fileName")
                     Log.i(TAG, "Received recording saved broadcast: $fileName")
@@ -84,13 +78,19 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onCreate")
         setContentView(R.layout.activity_main)
 
+        // bind live panel views
+        liveAcc = findViewById(R.id.live_acc)
+        liveGyro = findViewById(R.id.live_gyro)
+        liveRot = findViewById(R.id.live_rot)
+        liveMag = findViewById(R.id.live_mag)
+
         // Start the sensor service immediately when app launches
         startSensorServiceSafely()
 
         // Request notification permission (Android 13+) so updates can be shown
         requestNotificationPermissionIfNeeded()
 
-        // Setup click listeners for zone dialogs
+        // Setup click listeners for keypad zones
         setupZoneClickListeners()
     }
 
@@ -121,7 +121,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupZoneClickListeners() {
-        // IDs must match your activity_main.xml — zone0 is included last
         val zoneIds = listOf(
             R.id.layout_zone1, R.id.layout_zone2, R.id.layout_zone3,
             R.id.layout_zone4, R.id.layout_zone5, R.id.layout_zone6,
@@ -129,14 +128,24 @@ class MainActivity : AppCompatActivity() {
             R.id.layout_zone0
         )
 
-        // corresponding zone numbers — last entry is 0
         val zoneNumbers = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)
 
         zoneIds.zip(zoneNumbers).forEach { (id, zoneNumber) ->
             findViewById<LinearLayout>(id)?.setOnClickListener {
-                showZoneDataDialog(zoneNumber)
+                startZoneRecording(zoneNumber)
             }
         }
+    }
+
+    // No more dialog – just start recording with pre/post window
+    private fun startZoneRecording(zoneNumber: Int) {
+        val zoneName = zoneNumber.toString()
+        val startIntent = Intent(this, SensorService::class.java).apply {
+            action = SensorService.ACTION_START_RECORDING
+            putExtra("zoneName", zoneName)
+        }
+        startService(startIntent)
+        Toast.makeText(this, "Recording zone $zoneName", Toast.LENGTH_SHORT).show()
     }
 
     override fun onStart() {
@@ -176,43 +185,5 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == REQ_POST_NOTIF && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startSensorServiceSafely()
         }
-    }
-
-    private fun showZoneDataDialog(zoneNumber: Int) {
-        zoneDialog = Dialog(this)
-        zoneDialog?.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        zoneDialog?.setContentView(R.layout.dialog_zone_data)
-        zoneDialog?.setCancelable(false)
-
-        tvAcc = zoneDialog?.findViewById(R.id.text_acc_data)
-        tvGyro = zoneDialog?.findViewById(R.id.text_gyro_data)
-        tvRot = zoneDialog?.findViewById(R.id.text_rot_data)
-        tvMag = zoneDialog?.findViewById(R.id.text_mag_data)
-        btnClose = zoneDialog?.findViewById(R.id.button_close)
-
-        // set placeholders right away
-        tvAcc?.text = "ACC: X=-, Y=-, Z=-"
-        tvGyro?.text = "GYRO: X=-, Y=-, Z=-"
-        tvRot?.text = "ROT: X=-, Y=-, Z=-"
-        tvMag?.text = "MAG: X=-, Y=-, Z=-"
-
-        // Use numeric zone names (e.g., "8" or "0")
-        val zoneName = zoneNumber.toString()
-
-        val startIntent = Intent(this, SensorService::class.java).apply {
-            action = SensorService.ACTION_START_RECORDING
-            putExtra("zoneName", zoneName)
-        }
-        startService(startIntent)
-
-        btnClose?.setOnClickListener {
-            val stopIntent = Intent(this, SensorService::class.java).apply {
-                action = SensorService.ACTION_STOP_RECORDING
-            }
-            startService(stopIntent)
-            zoneDialog?.dismiss()
-        }
-
-        zoneDialog?.show()
     }
 }
