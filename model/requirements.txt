@@ -1,6 +1,10 @@
 flask
+scipy
+torch
+torchvision
+torchaudio
 pandas
 numpy
-scipy
 scikit-learn
-joblib
+matplotlib
+
