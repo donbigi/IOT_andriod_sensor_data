@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 # ------------------------------
 
 DATA_DIR = "data"
-TARGET_LEN = 500     # Pad/truncate all sequences to this
+TARGET_LEN = 700     # Pad/truncate all sequences to this
 BATCH_SIZE = 32
 EPOCHS = 20
 LR = 0.001
@@ -154,7 +154,8 @@ for epoch in range(EPOCHS):
     total_loss = 0
 
     for X, y in train_loader:
-        X, y = X.to(DEVICE), torch.tensor(y).to(DEVICE)
+        X = X.to(DEVICE)
+        y = y.to(DEVICE)
 
         optimizer.zero_grad()
         out = model(X)

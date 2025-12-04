@@ -3,10 +3,10 @@ import glob
 import pandas as pd
 
 DATA_DIR = "data"   # folder with your CSV files
-MIN_ROWS = 350
-MAX_ROWS = 600
+MIN_ROWS = 650
+MAX_ROWS = 750
 
-DRY_RUN = False  # ← change to False to actually delete files
+DRY_RUN = False # ← change to False to actually delete files
 
 files = glob.glob(os.path.join(DATA_DIR, "*.csv"))
 

@@ -17,57 +17,56 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
+
     private val TAG = "MainActivity"
     private val REQ_POST_NOTIF = 101
 
     private var receiverRegistered = false
 
-    // live sensor panel (top)
+    // Live UI sensor text fields
     private lateinit var liveAcc: TextView
     private lateinit var liveGyro: TextView
     private lateinit var liveRot: TextView
     private lateinit var liveMag: TextView
 
+    // BroadcastReceiver that handles live sensor updates + saved CSV notification
     private val sensorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.v(TAG, "sensorReceiver.onReceive: action=${intent?.action}")
             if (intent == null) return
+
             when (intent.action) {
+
                 SensorService.ACTION_SENSOR_UPDATE -> {
                     val acc = intent.getFloatArrayExtra("acc")
                     val gyro = intent.getFloatArrayExtra("gyro")
                     val rotv = intent.getFloatArrayExtra("rotv")
                     val mag = intent.getFloatArrayExtra("mag")
 
-                    if (acc != null) {
-                        liveAcc.text = "ACC: X=${"%.2f".format(acc[0])}, Y=${"%.2f".format(acc[1])}, Z=${"%.2f".format(acc[2])}"
-                    } else {
-                        liveAcc.text = "ACC: X=-, Y=-, Z=-"
-                    }
+                    // Safely update all UI fields
+                    liveAcc.text = if (acc != null)
+                        "ACC: X=%.2f Y=%.2f Z=%.2f".format(acc[0], acc[1], acc[2])
+                    else "ACC: - - -"
 
-                    if (gyro != null) {
-                        liveGyro.text = "GYRO: X=${"%.2f".format(gyro[0])}, Y=${"%.2f".format(gyro[1])}, Z=${"%.2f".format(gyro[2])}"
-                    } else {
-                        liveGyro.text = "GYRO: X=-, Y=-, Z=-"
-                    }
+                    liveGyro.text = if (gyro != null)
+                        "GYRO: X=%.2f Y=%.2f Z=%.2f".format(gyro[0], gyro[1], gyro[2])
+                    else "GYRO: - - -"
 
-                    if (rotv != null) {
-                        liveRot.text = "ROT: X=${"%.2f".format(rotv[0])}, Y=${"%.2f".format(rotv[1])}, Z=${"%.2f".format(rotv[2])}"
-                    } else {
-                        liveRot.text = "ROT: X=-, Y=-, Z=-"
-                    }
+                    liveRot.text = if (rotv != null)
+                        "ROT: X=%.2f Y=%.2f Z=%.2f".format(rotv[0], rotv[1], rotv[2])
+                    else "ROT: - - -"
 
-                    if (mag != null) {
-                        liveMag.text = "MAG: X=${"%.2f".format(mag[0])}, Y=${"%.2f".format(mag[1])}, Z=${"%.2f".format(mag[2])}"
-                    } else {
-                        liveMag.text = "MAG: X=-, Y=-, Z=-"
-                    }
+                    liveMag.text = if (mag != null)
+                        "MAG: X=%.2f Y=%.2f Z=%.2f".format(mag[0], mag[1], mag[2])
+                    else "MAG: - - -"
                 }
 
                 SensorService.ACTION_RECORDING_SAVED -> {
                     val fileName = intent.getStringExtra("fileName")
-                    Log.i(TAG, "Received recording saved broadcast: $fileName")
-                    Toast.makeText(this@MainActivity, "Recording saved: $fileName", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Saved: $fileName",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
@@ -75,22 +74,23 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate")
         setContentView(R.layout.activity_main)
 
-        // bind live panel views
+        Log.d(TAG, "onCreate")
+
+        // Bind all TextViews
         liveAcc = findViewById(R.id.live_acc)
         liveGyro = findViewById(R.id.live_gyro)
         liveRot = findViewById(R.id.live_rot)
         liveMag = findViewById(R.id.live_mag)
 
-        // Start the sensor service immediately when app launches
+        // Start background service immediately
         startSensorServiceSafely()
 
-        // Request notification permission (Android 13+) so updates can be shown
+        // Ask for notification permission if Android 13+
         requestNotificationPermissionIfNeeded()
 
-        // Setup click listeners for keypad zones
+        // Setup keypad listeners
         setupZoneClickListeners()
     }
 
@@ -111,10 +111,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startSensorServiceSafely() {
-        val svc = Intent(this, SensorService::class.java)
+        val svcIntent = Intent(this, SensorService::class.java)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc) else startService(svc)
-            Log.d(TAG, "Requested start of SensorService")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                startForegroundService(svcIntent)
+            else
+                startService(svcIntent)
+
+            Log.d(TAG, "Requested SensorService start")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start SensorService", e)
         }
@@ -130,30 +134,31 @@ class MainActivity : AppCompatActivity() {
 
         val zoneNumbers = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)
 
-        zoneIds.zip(zoneNumbers).forEach { (id, zoneNumber) ->
-            findViewById<LinearLayout>(id)?.setOnClickListener {
+        zoneIds.zip(zoneNumbers).forEach { (viewId, zoneNumber) ->
+            findViewById<LinearLayout>(viewId)?.setOnClickListener {
                 startZoneRecording(zoneNumber)
             }
         }
     }
 
-    // No more dialog – just start recording with pre/post window
-    private fun startZoneRecording(zoneNumber: Int) {
-        val zoneName = zoneNumber.toString()
-        val startIntent = Intent(this, SensorService::class.java).apply {
+    private fun startZoneRecording(zone: Int) {
+        val intent = Intent(this, SensorService::class.java).apply {
             action = SensorService.ACTION_START_RECORDING
-            putExtra("zoneName", zoneName)
+            putExtra("zoneName", zone.toString())
         }
-        startService(startIntent)
-        Toast.makeText(this, "Recording zone $zoneName", Toast.LENGTH_SHORT).show()
+        startService(intent)
+        Toast.makeText(this, "Recording zone $zone", Toast.LENGTH_SHORT).show()
     }
 
     override fun onStart() {
         super.onStart()
+
+        // Listen for sensor data & recording saved events
         val filter = IntentFilter().apply {
             addAction(SensorService.ACTION_SENSOR_UPDATE)
             addAction(SensorService.ACTION_RECORDING_SAVED)
         }
+
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(sensorReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -161,7 +166,7 @@ class MainActivity : AppCompatActivity() {
                 registerReceiver(sensorReceiver, filter)
             }
             receiverRegistered = true
-            Log.d(TAG, "Receiver registered")
+            Log.d(TAG, "sensorReceiver registered")
         } catch (e: Exception) {
             Log.e(TAG, "registerReceiver failed", e)
         }
@@ -180,9 +185,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_POST_NOTIF && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == REQ_POST_NOTIF &&
+            grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
             startSensorServiceSafely()
         }
     }
