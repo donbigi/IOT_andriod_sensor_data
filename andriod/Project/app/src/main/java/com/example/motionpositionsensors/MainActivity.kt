@@ -12,6 +12,7 @@ import android.util.Log
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -29,6 +30,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var liveRot: TextView
     private lateinit var liveMag: TextView
 
+    // Start/Stop buttons
+    private lateinit var btnStart: Button
+    private lateinit var btnStop: Button
+
     // BroadcastReceiver that handles live sensor updates + saved CSV notification
     private val sensorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -42,7 +47,6 @@ class MainActivity : AppCompatActivity() {
                     val rotv = intent.getFloatArrayExtra("rotv")
                     val mag = intent.getFloatArrayExtra("mag")
 
-                    // Safely update all UI fields
                     liveAcc.text = if (acc != null)
                         "ACC: X=%.2f Y=%.2f Z=%.2f".format(acc[0], acc[1], acc[2])
                     else "ACC: - - -"
@@ -84,14 +88,36 @@ class MainActivity : AppCompatActivity() {
         liveRot = findViewById(R.id.live_rot)
         liveMag = findViewById(R.id.live_mag)
 
-        // Start background service immediately
+        // Bind buttons
+        btnStart = findViewById(R.id.btn_start)
+        btnStop = findViewById(R.id.btn_stop)
+
+        // Start sensor service automatically
         startSensorServiceSafely()
 
-        // Ask for notification permission if Android 13+
         requestNotificationPermissionIfNeeded()
 
-        // Setup keypad listeners
+        // Setup keypad listeners for zones 0–9
         setupZoneClickListeners()
+
+        // Setup Start button manually begins recording without a zone
+        btnStart.setOnClickListener {
+            val intent = Intent(this, SensorService::class.java).apply {
+                action = SensorService.ACTION_START_RECORDING
+                putExtra("zoneName", "manual")
+            }
+            startService(intent)
+            Toast.makeText(this, "Manual recording started", Toast.LENGTH_SHORT).show()
+        }
+
+        // Setup Stop button
+        btnStop.setOnClickListener {
+            val intent = Intent(this, SensorService::class.java).apply {
+                action = SensorService.ACTION_STOP_RECORDING
+            }
+            startService(intent)
+            Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -153,7 +179,6 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
 
-        // Listen for sensor data & recording saved events
         val filter = IntentFilter().apply {
             addAction(SensorService.ACTION_SENSOR_UPDATE)
             addAction(SensorService.ACTION_RECORDING_SAVED)
@@ -185,17 +210,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_POST_NOTIF &&
-            grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
-            startSensorServiceSafely()
-        }
+    override fun onPause() {
+        super.onPause()
+        SensorService.appInForeground = false
     }
+
+    override fun onResume() {
+        super.onResume()
+        SensorService.appInForeground = true
+    }
+
 }
